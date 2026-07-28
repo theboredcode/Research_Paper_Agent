@@ -36,16 +36,17 @@ source venv/bin/activate        # on Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**5. Get an Anthropic API key**
-Go to https://console.anthropic.com, create a key, then set it as an
-environment variable so the scripts can use it without you pasting it into
-any file:
+**5. Get a free Gemini API key**
+Go to https://aistudio.google.com/apikey, sign in with a Google account, and
+click "Create API key" — no billing setup or credit card required for the
+free tier (Flash-class models). Set it as an environment variable:
 ```
-export ANTHROPIC_API_KEY=sk-ant-...      # on Windows: set ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=AIza...      # on Windows: set GEMINI_API_KEY=AIza...
 ```
-This uses the Claude API, which is billed separately from any Claude.ai
-subscription — check current pricing at https://docs.claude.com before
-running this on a large collection.
+The free tier is rate-limited (a handful of requests per minute), which is
+why step 3 pauses briefly between papers. If you outgrow the free tier or
+want to use Claude instead, check current options and pricing at
+https://ai.google.dev/pricing and https://docs.claude.com.
 
 ## Configure your search
 
@@ -75,11 +76,14 @@ created. After the last step, open `concept_report.md` to see your results.
 - **Step 2 fails on some PDFs** — a few arXiv papers are scanned images
   rather than real text; the script will warn you and skip extraction
   quality issues rather than crash. This is expected for a handful of papers.
-- **Step 3 says "ANTHROPIC_API_KEY not set"** — you need to `export` it in
-  the same terminal session you're running the script from. It doesn't
-  persist across terminal restarts unless you add it to your shell profile.
-- **Step 3 is slow** — this is expected; it makes one API call per paper.
-  For 15 papers it should take under a minute.
+- **Step 3 says "GEMINI_API_KEY not set"** — you need to `export` it in
+  the same terminal session you're running the script from (or re-set it
+  in Colab, since it doesn't persist across sessions there either).
+- **Step 3 hits a 429 / rate limit error** — you're on the free tier, which
+  has per-minute request limits. Reduce `MAX_PAPERS`, or increase the
+  `time.sleep(2)` pause in `3_extract_concepts.py` between calls.
+- **Step 3 is slow** — this is expected; it makes one API call per paper
+  with a short pause between each for rate limiting.
 - **Step 4 merges things that shouldn't be merged, or misses obvious
   duplicates** — adjust `SIMILARITY_THRESHOLD` near the top of
   `4_aggregate_concepts.py`. Lower it to merge more aggressively, raise it
