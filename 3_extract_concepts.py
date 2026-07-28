@@ -1,10 +1,14 @@
 """
-STEP 3: Extract relevant concepts from each paper using Claude.
+STEP 3: Extract relevant concepts from each paper using Google Gemini
+(free tier — no credit card needed).
 
 Run: python 3_extract_concepts.py
 
-Requires: an Anthropic API key set as an environment variable:
-    export ANTHROPIC_API_KEY=sk-ant-...
+Requires: a free Gemini API key set as an environment variable:
+    export GEMINI_API_KEY=AIza...
+Get one at https://aistudio.google.com/apikey — sign in with a Google
+account, click "Create API key". No billing setup required for the
+free tier (Flash-class models).
 
 Reads:  texts/<arxiv_id>.txt (from step 2)
 Output: concepts.json — one entry per paper, each with a list of
@@ -14,12 +18,15 @@ Output: concepts.json — one entry per paper, each with a list of
 import json
 import os
 import time
-
-import anthropic
+import urllib.error
+import urllib.request
 
 import config
 
-client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from environment
+GEMINI_ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "{model}:generateContent?key={key}"
+)
 
 # Keep each paper's text within a reasonable size for the model.
 # This takes the first N characters, which usually covers abstract,
@@ -50,41 +57,49 @@ Paper text:
 """
 
 
-def extract_concepts_for_paper(paper, text):
+def extract_concepts_for_paper(paper, text, api_key):
     prompt = EXTRACTION_PROMPT.format(
         domain=config.DOMAIN_QUERY,
         title=paper["title"],
         text=text[:MAX_CHARS_PER_PAPER],
     )
 
-    response = client.messages.create(
-        model=config.CLAUDE_MODEL,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
+    url = GEMINI_ENDPOINT.format(model=config.GEMINI_MODEL, key=api_key)
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        # JSON mode: Gemini returns only valid JSON, no markdown fences to strip
+        "generationConfig": {"responseMimeType": "application/json"},
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
 
-    raw_text = "".join(
-        block.text for block in response.content if block.type == "text"
-    ).strip()
-
-    # Strip markdown code fences if the model added them despite instructions
-    if raw_text.startswith("```"):
-        raw_text = raw_text.strip("`")
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:]
-        raw_text = raw_text.strip()
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            data = json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        print(f"    API error {e.code} for {paper['id']}: {err_body[:300]}")
+        return []
 
     try:
+        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
         parsed = json.loads(raw_text)
         return parsed.get("concepts", [])
-    except json.JSONDecodeError:
-        print(f"    Warning: could not parse model output as JSON for {paper['id']}. Skipping.")
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        print(f"    Warning: could not parse Gemini output for {paper['id']} ({e}). Skipping.")
         return []
 
 
 def main():
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("ERROR: Set your API key first:\n  export ANTHROPIC_API_KEY=sk-ant-...")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("ERROR: Set your free Gemini API key first:")
+        print("  export GEMINI_API_KEY=AIza...")
+        print("Get one at https://aistudio.google.com/apikey")
         return
 
     with open(config.PAPERS_FILE) as f:
@@ -108,7 +123,7 @@ def main():
             continue
 
         print(f"[{i}/{len(papers)}] {paper['id']} — extracting concepts...")
-        concepts = extract_concepts_for_paper(paper, text)
+        concepts = extract_concepts_for_paper(paper, text, api_key)
         print(f"    Found {len(concepts)} relevant concepts")
 
         results.append({
@@ -117,7 +132,8 @@ def main():
             "concepts": concepts,
         })
 
-        time.sleep(0.5)
+        # Free tier has per-minute rate limits — pause between calls to stay under them
+        time.sleep(2)
 
     with open(config.CONCEPTS_FILE, "w") as f:
         json.dump(results, f, indent=2)
