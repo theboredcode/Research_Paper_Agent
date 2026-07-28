@@ -14,8 +14,10 @@ MAX_PAPERS = 15
 # Common ones: cs.LG (machine learning), cs.CL (NLP), cs.CV (vision), q-bio (biology)
 ARXIV_CATEGORY = "cs.LG"
 
-# Which Claude model to use for concept extraction.
-CLAUDE_MODEL = "claude-sonnet-5"
+# Which Gemini model to use for concept extraction (free tier — Flash-class
+# models are free as of this writing; check https://ai.google.dev/pricing
+# for current model availability if this stops working).
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # Folders — you shouldn't need to change these
 PDF_DIR = "pdfs"
