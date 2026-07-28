@@ -1,5 +1,4 @@
 requests
 pypdf
-anthropic
 scikit-learn
 numpy
